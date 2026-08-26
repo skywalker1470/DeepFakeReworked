@@ -1,3 +1,4 @@
+
 # DeepFake Detector
 
 A face-level deepfake detection pipeline trained on **Celeb-DF v2**. It fine-tunes an **EfficientNet-B0** binary classifier on MTCNN-cropped face frames and ships a Flask web app that lets you upload a video, runs frame-by-frame inference, overlays REAL/FAKE labels on the video, and reports an aggregate verdict.
@@ -90,3 +91,4 @@ output/best_model.pth         Pretrained model checkpoint
 videos/                       Sample test videos
 requirements.txt              Python dependencies
 ```
+
