@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DeepFake Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ── reset & variables ───────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080c10;
+    --surface:   #0d1117;
+    --border:    #1e2a38;
+    --accent:    #00e5ff;
+    --danger:    #ff3b5c;
+    --safe:      #00e676;
+    --muted:     #4a5568;
+    --text:      #e2e8f0;
+    --subtext:   #718096;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-sans: 'Syne', sans-serif;
+    --radius:    6px;
+    --glow:      0 0 20px rgba(0,229,255,0.15);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+  }
+
+  /* ── noise overlay ───────────────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── layout ──────────────────────────────────────────────────────────── */
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* ── header ──────────────────────────────────────────────────────────── */
+  header {
+    margin-bottom: 52px;
+  }
+  .logo-line {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--glow);
+  }
+  .logo-icon svg { width: 20px; height: 20px; }
+  h1 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  h1 span { color: var(--accent); }
+  .subtitle {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--subtext);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── scan line rule ──────────────────────────────────────────────────── */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
+    margin: 20px 0 32px;
+    opacity: 0.4;
+  }
+
+  /* ── upload card ─────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 28px;
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.03);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon {
+    width: 48px; height: 48px;
+    margin: 0 auto 16px;
+    color: var(--muted);
+  }
+  .drop-zone:hover .drop-icon { color: var(--accent); }
+  .drop-label {
+    font-size: 0.95rem;
+    color: var(--subtext);
+    font-family: var(--font-mono);
+  }
+  .drop-label strong {
+    color: var(--accent);
+    font-weight: 400;
+  }
+  .file-hint {
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+  }
+  #file-chosen {
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    min-height: 1.2em;
+  }
+
+  /* ── submit button ───────────────────────────────────────────────────── */
+  .btn-analyze {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    background: transparent;
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s, color 0.2s;
+  }
+  .btn-analyze:hover {
+    background: var(--accent);
+    color: var(--bg);
+    box-shadow: var(--glow);
+  }
+  .btn-analyze:disabled {
+    opacity: 0.4; cursor: not-allowed;
+  }
+  .btn-analyze svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ── progress / scanning ─────────────────────────────────────────────── */
+  #progress-block {
+    display: none;
+    margin-top: 20px;
+  }
+  .scan-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .scan-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), #7b61ff);
+    border-radius: 99px;
+    animation: scan-anim 2.4s ease-in-out infinite;
+  }
+  @keyframes scan-anim {
+    0%   { width: 0%; margin-left: 0; }
+    50%  { width: 60%; margin-left: 20%; }
+    100% { width: 0%; margin-left: 100%; }
+  }
+  .scan-text {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--subtext);
+    margin-top: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── error ───────────────────────────────────────────────────────────── */
+  .error-box {
+    background: rgba(255,59,92,0.07);
+    border: 1px solid rgba(255,59,92,0.3);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--danger);
+    margin-bottom: 24px;
+  }
+
+  /* ── results ─────────────────────────────────────────────────────────── */
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .verdict-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .verdict-badge.fake {
+    background: rgba(255,59,92,0.1);
+    border: 1.5px solid var(--danger);
+    color: var(--danger);
+  }
+  .verdict-badge.real {
+    background: rgba(0,230,118,0.08);
+    border: 1.5px solid var(--safe);
+    color: var(--safe);
+  }
+  .verdict-badge svg { width: 16px; height: 16px; }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align: center;
+  }
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-value.danger { color: var(--danger); }
+  .stat-value.safe   { color: var(--safe); }
+  .stat-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* probability bar */
+  .bar-row { margin-bottom: 20px; }
+  .bar-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--subtext);
+    margin-bottom: 6px;
+  }
+  .bar-track {
+    height: 8px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+    display: flex;
+  }
+  .bar-fill-fake {
+    height: 100%;
+    background: var(--danger);
+    border-radius: 99px 0 0 99px;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .bar-fill-real {
+    height: 100%;
+    background: var(--safe);
+    border-radius: 0 99px 99px 0;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* video player */
+  .video-wrap {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+    position: relative;
+  }
+  .video-wrap video {
+    width: 100%;
+    display: block;
+    max-height: 480px;
+  }
+  .video-caption {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    letter-spacing: 0.06em;
+  }
+
+  /* ── footer ──────────────────────────────────────────────────────────── */
+  footer {
+    margin-top: 64px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* ── responsive ──────────────────────────────────────────────────────── */
+  @media (max-width: 560px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- header -->
+  <header>
+    <div class="logo-line">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          <path d="M11 8v6M8 11h6"/>
+        </svg>
+      </div>
+      <h1>Deep<span>Fake</span> Detector</h1>
+    </div>
+    <p class="subtitle">XceptionNet · Celeb-DF v2 · Binary Classification</p>
+    <div class="rule"></div>
+  </header>
+
+  <!-- error -->
+  {% if error %}
+  <div class="error-box">⚠ {{ error }}</div>
+  {% endif %}
+
+  <!-- upload form -->
+  <div class="card">
+    <form id="upload-form" method="POST" enctype="multipart/form-data">
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" name="video" id="video-input"
+               accept=".mp4,.avi,.mov,.mkv" required />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <p class="drop-label"><strong>Click to select</strong> or drag a video here</p>
+        <p class="file-hint">MP4 · AVI · MOV · MKV — max 500 MB</p>
+      </div>
+      <div id="file-chosen"></div>
+
+      <div id="progress-block">
+        <div class="scan-bar-wrap"><div class="scan-bar"></div></div>
+        <p class="scan-text">SCANNING FRAMES — THIS MAY TAKE A FEW MINUTES …</p>
+      </div>
+
+      <button type="submit" class="btn-analyze" id="submit-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Run Analysis
+      </button>
+    </form>
+  </div>
+
+  <!-- results -->
+  {% if result and filename %}
+  <div class="card">
+    <div class="results-header">
+      <span style="font-size:0.8rem;font-family:var(--font-mono);color:var(--subtext);
+                   letter-spacing:0.1em;text-transform:uppercase;">Analysis Result</span>
+      <div class="verdict-badge {{ 'fake' if result.verdict == 'FAKE' else 'real' }}">
+        {% if result.verdict == 'FAKE' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        {% endif %}
+        {{ result.verdict }}
+      </div>
+    </div>
+
+    <!-- stats -->
+    <div class="stats-row">
+      <div class="stat-cell">
+        <div class="stat-value danger">{{ result.fake_pct }}%</div>
+        <div class="stat-label">Fake Frames</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value safe">{{ result.real_pct }}%</div>
+        <div class="stat-label">Real Frames</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-value">{{ result.total_frames }}</div>
+        <div class="stat-label">Total Frames</div>
+      </div>
+    </div>
+
+    <!-- probability bar -->
+    <div class="bar-row">
+      <div class="bar-label-row">
+        <span>FAKE  {{ result.fake_pct }}%</span>
+        <span>REAL  {{ result.real_pct }}%</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill-fake" style="width: {{ result.fake_pct }}%"></div>
+        <div class="bar-fill-real" style="width: {{ result.real_pct }}%"></div>
+      </div>
+    </div>
+
+    <!-- annotated video -->
+    <div class="video-wrap">
+      <video controls autoplay muted loop playsinline>
+        <source src="{{ url_for('serve_processed', filename=filename) }}" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <div class="video-caption">ANNOTATED OUTPUT · {{ filename }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <footer>DEEPFAKE DETECTOR · XCEPTION · CELEB-DF V2</footer>
+</div>
+
+<script>
+  const input    = document.getElementById('video-input');
+  const chosen   = document.getElementById('file-chosen');
+  const form     = document.getElementById('upload-form');
+  const btn      = document.getElementById('submit-btn');
+  const progress = document.getElementById('progress-block');
+  const dropZone = document.getElementById('drop-zone');
+
+  input.addEventListener('change', () => {
+    chosen.textContent = input.files[0] ? '▸ ' + input.files[0].name : '';
+  });
+
+  // drag & drop visual feedback
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      chosen.textContent = '▸ ' + e.dataTransfer.files[0].name;
+    }
+  });
+
+  form.addEventListener('submit', () => {
+    btn.disabled = true;
+    btn.textContent = 'Analysing…';
+    progress.style.display = 'block';
+  });
+</script>
+</body>
+</html>
