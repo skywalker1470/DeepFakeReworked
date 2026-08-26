@@ -3,7 +3,7 @@
 
 A face-level deepfake detection pipeline trained on **Celeb-DF v2**. It fine-tunes an **EfficientNet-B0** binary classifier on MTCNN-cropped face frames and ships a Flask web app that lets you upload a video, runs frame-by-frame inference, overlays REAL/FAKE labels on the video, and reports an aggregate verdict.
 
-> Note: some filenames/strings (`train_celebdf_xception.py`, the page title "XceptionNet") reference the project's original Xception backbone. The model was later switched to **EfficientNet-B0**; the naming just wasn't updated.
+> Note: some filenames/strings (`train_celebdf_xception.py`, the page title "XceptionNet") reference the project's original Xception backbone. The model was later switched to **EfficientNet-B0**, and the naming just wasn't updated.
 
 ## Demo
 
@@ -11,21 +11,21 @@ A face-level deepfake detection pipeline trained on **Celeb-DF v2**. It fine-tun
 
 ## How it works
 
-1. **`data_create.py`** — downloads the Celeb-DF v2 dataset from Kaggle Hub (`reubensuju/celeb-df-v2`).
-2. **`extract_frames.py`** — for every video in `Celeb-real`, `YouTube-real`, and `Celeb-synthesis`, uses **MTCNN** (`facenet-pytorch`) to detect and crop 2 face frames (first frame + middle frame) and saves them as JPEGs under a `frames/` directory.
-3. **`prepare_celebdf_list.py`** — builds train/val/test split text files (`data_list/celebdf_{train,val,test}.txt`), each line being `<frame_path> <label>` (0 = real, 1 = fake). Splitting is done **by video** (not by frame) to avoid leakage, and the official Celeb-DF test list is respected. Dataset size is capped via `MAX_VIDEOS_PER_CLASS`.
-4. **`train_celebdf_xception.py`** — fine-tunes `torchvision.models.efficientnet_b0` (ImageNet weights) with a replaced binary classification head. Freezes the first half of the feature layers, uses weighted `BCEWithLogitsLoss`, AMP mixed precision, and saves the best checkpoint to `output/best_model.pth` based on validation accuracy.
-5. **`testing.py`** — evaluates the trained model on the held-out test split, aggregating frame-level probabilities to **video-level** predictions (mean pooling), then reports accuracy, ROC-AUC, a confusion matrix at threshold 0.5, and a scan for the best accuracy threshold.
-6. **`app.py`** — a Flask app for interactive inference. Uploads a video, runs MTCNN + the trained EfficientNet-B0 on every 5th frame (`FRAME_SKIP`), overlays a REAL/FAKE label and confidence per sampled frame, re-encodes the output to browser-compatible H.264 via `ffmpeg`, and renders a verdict + fake/real frame percentages in `templates/index.html`.
+1. **`data_create.py`**: downloads the Celeb-DF v2 dataset from Kaggle Hub (`reubensuju/celeb-df-v2`).
+2. **`extract_frames.py`**: for every video in `Celeb-real`, `YouTube-real`, and `Celeb-synthesis`, uses **MTCNN** (`facenet-pytorch`) to detect and crop 2 face frames (first frame + middle frame) and saves them as JPEGs under a `frames/` directory.
+3. **`prepare_celebdf_list.py`**: builds train/val/test split text files (`data_list/celebdf_{train,val,test}.txt`), each line being `<frame_path> <label>` (0 = real, 1 = fake). Splitting is done **by video** (not by frame) to avoid leakage, and the official Celeb-DF test list is respected. Dataset size is capped via `MAX_VIDEOS_PER_CLASS`.
+4. **`train_celebdf_xception.py`**: fine-tunes `torchvision.models.efficientnet_b0` (ImageNet weights) with a replaced binary classification head. Freezes the first half of the feature layers, uses weighted `BCEWithLogitsLoss`, AMP mixed precision, and saves the best checkpoint to `output/best_model.pth` based on validation accuracy.
+5. **`testing.py`**: evaluates the trained model on the held-out test split, aggregating frame-level probabilities to **video-level** predictions (mean pooling), then reports accuracy, ROC-AUC, a confusion matrix at threshold 0.5, and a scan for the best accuracy threshold.
+6. **`app.py`**: a Flask app for interactive inference. Uploads a video, runs MTCNN and the trained EfficientNet-B0 on every 5th frame (`FRAME_SKIP`), overlays a REAL/FAKE label and confidence per sampled frame, re-encodes the output to browser-compatible H.264 via `ffmpeg`, and renders a verdict plus fake/real frame percentages in `templates/index.html`.
 
 ## Requirements
 
-- Python 3.10+ (project was pinned to CUDA 12.1 wheels of PyTorch — see `requirements.txt`)
+- Python 3.10+ (project was pinned to CUDA 12.1 wheels of PyTorch, see `requirements.txt`)
 - **`ffmpeg`** available on your `PATH` (required by `app.py` to re-encode annotated output for browser playback)
-- An NVIDIA GPU + CUDA is strongly recommended for training/extraction, though everything falls back to CPU (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`)
+- An NVIDIA GPU with CUDA is strongly recommended for training/extraction, though everything falls back to CPU (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`)
 - A [Kaggle account](https://www.kaggle.com/) configured for `kagglehub` if you want to download the dataset yourself (`data_create.py`)
 
-`requirements.txt` currently has several duplicated/superseded dependency blocks (leftover from iterative `pip freeze` exports) — if you hit resolver conflicts, install the latest block near the end of the file, or regenerate it fresh with `pip install -r requirements.txt --upgrade`.
+`requirements.txt` currently has several duplicated/superseded dependency blocks (leftover from iterative `pip freeze` exports). If you hit resolver conflicts, install the latest block near the end of the file, or regenerate it fresh with `pip install -r requirements.txt --upgrade`.
 
 ## Setup
 
