@@ -1,0 +1,149 @@
+# Deepfake Detector — Cloud Deployment
+
+A cloud-deployed version of the existing Deepfake Detection System. The model is wrapped in a REST API, containerized with Docker, deployed to AWS, and the whole build-deploy-test cycle is automated with a Bash script.
+
+This project takes an existing trained model and turns it into a real, callable cloud service — the goal is to demonstrate REST API design, containerization, cloud deployment, and automation end to end.
+
+## Why this project
+
+Most of my past work has focused on building and evaluating models. This project focuses on the other half: taking a working model and shipping it as a real service. It covers:
+
+- REST API design and system integration
+- Containerization with Docker
+- Cloud deployment on AWS
+- Automation scripting with Bash
+
+## Architecture
+
+```
+Client (curl / Postman / script)
+        │
+        ▼
+   REST API (FastAPI)
+        │
+        ▼
+Deepfake Detector Model (EfficientNet-B0 + MTCNN pipeline)
+        │
+        ▼
+   Docker container
+        │
+        ▼
+   AWS (EC2 or Lambda)
+```
+
+## Tech Stack
+
+- **Model**: EfficientNet-B0 (transfer learning), MTCNN for face detection, frame-level video inference
+- **API**: FastAPI (or Flask, reusing the existing web app as a base)
+- **Containerization**: Docker
+- **Cloud**: AWS EC2 (simple VM deployment) or AWS Lambda (serverless, if the model is lightweight enough)
+- **Automation**: Bash script for build, push, deploy, and smoke-test
+
+## Project Structure
+
+```
+deepfake-detector-cloud/
+├── app/
+│   ├── main.py            # FastAPI app, defines endpoints
+│   ├── model.py            # Model loading and inference logic
+│   ├── preprocess.py       # Frame extraction, MTCNN face alignment
+│   └── requirements.txt
+├── Dockerfile
+├── docker-compose.yml       # optional, for local testing
+├── deploy.sh                # automates build → push → deploy → test
+├── tests/
+│   └── test_api.py
+└── README.md
+```
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Health check, returns service status |
+| `POST` | `/predict` | Accepts a video file, returns prediction (real/fake) with confidence score |
+| `GET` | `/metrics` | Returns basic usage stats (request count, avg latency) |
+
+Example request:
+```bash
+curl -X POST "http://<host>:8000/predict" \
+  -F "file=@sample_video.mp4"
+```
+
+Example response:
+```json
+{
+  "prediction": "fake",
+  "confidence": 0.91,
+  "frames_analyzed": 24,
+  "inference_time_ms": 340
+}
+```
+
+## Setup (Local)
+
+1. Clone the repo and install dependencies:
+   ```bash
+   pip install -r app/requirements.txt
+   ```
+2. Run locally:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+3. Test:
+   ```bash
+   curl http://localhost:8000/health
+   ```
+
+## Docker
+
+Build and run the container locally:
+```bash
+docker build -t deepfake-detector .
+docker run -p 8000:8000 deepfake-detector
+```
+
+## AWS Deployment
+
+**Option A — EC2 (simplest)**
+1. Launch a small EC2 instance (e.g., t3.medium, or a GPU instance if inference speed matters).
+2. Install Docker on the instance.
+3. Pull the image and run the container, exposing port 8000.
+4. Open the security group to allow inbound traffic on that port.
+
+**Option B — Lambda (serverless)**
+1. Package the model and dependencies into a Lambda-compatible container image.
+2. Deploy via AWS Lambda with a container image, fronted by API Gateway.
+3. Better suited if traffic is low/bursty and cold-start latency is acceptable.
+
+Start with EC2 for simplicity, move to Lambda later if there's time.
+
+## Automation Script (`deploy.sh`)
+
+The script automates the full cycle:
+1. Build the Docker image
+2. Tag and push it to a container registry (Docker Hub or AWS ECR)
+3. SSH into the EC2 instance and pull the latest image
+4. Restart the container
+5. Run a smoke test against `/health` to confirm the deployment succeeded
+
+```bash
+./deploy.sh
+```
+
+## Testing
+
+- Unit tests for the API endpoints (`tests/test_api.py`)
+- A smoke test script that hits `/health` and `/predict` with a sample video after every deployment
+- Manual test: run a known real and a known fake video through the deployed endpoint and confirm expected predictions
+
+## Future Improvements
+
+- Add authentication (API key) before exposing the endpoint publicly
+- Add request queuing for larger video files
+- Add CloudWatch logging and basic monitoring
+- Explore Lambda deployment for cost efficiency at low traffic
+
+## Status
+
+Planning stage. Model and Flask prototype already exist; this project wraps and deploys it.
