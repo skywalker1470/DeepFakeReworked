@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import torch
 from tqdm import tqdm
-from facenet_pytorch import MTCNN
+from face_detector import YOLOFaceDetector
 
 # Dataset folders
 CATEGORIES = ["Celeb-real", "YouTube-real", "Celeb-synthesis"]
@@ -13,14 +13,11 @@ CATEGORIES = ["Celeb-real", "YouTube-real", "Celeb-synthesis"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-# Initialize MTCNN
-mtcnn = MTCNN(
+# Initialize YOLOv8 face detector
+detector = YOLOFaceDetector(
     image_size=299,
     margin=20,
-    min_face_size=40,
-    thresholds=[0.6, 0.7, 0.7],
-    factor=0.709,
-    post_process=False,
+    conf_threshold=0.5,
     device=device
 )
 
@@ -50,16 +47,10 @@ def extract_two_frames(video_path, output_dir):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # Detect and crop face
-        face = mtcnn(frame_rgb)
+        face = detector.detect(frame_rgb)
 
         if face is None:
             continue
-
-        # Convert tensor → numpy
-        face = face.permute(1, 2, 0).cpu().numpy()
-
-        # Convert float [0,1] → uint8 [0,255]
-        face = (face * 255).astype("uint8")
 
         # Save
         out_path = os.path.join(output_dir, f"frame{idx+1:04d}.jpg")
@@ -80,7 +71,7 @@ def main():
     dataset_root = Path(args.dataset_root)
     frames_root = Path(args.frames_root)
 
-    print("\n── Extracting 2 Face Crops per Video (MTCNN) ─────────────")
+    print("\n── Extracting 2 Face Crops per Video (YOLOv8-face) ─────────────")
 
     total_saved = 0
 

@@ -1,0 +1,11 @@
+# PyTorch (CPU build; swap for a CUDA index-url if the deploy target has a GPU)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchvision==0.20.1
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+numpy>=2.0.0
+opencv-python-headless==4.13.0.92
+ultralytics>=8.3.150

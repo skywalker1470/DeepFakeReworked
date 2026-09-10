@@ -2,3 +2,16 @@ uploads/
 static/
 processed/
 venv/
+
+# dataset / generated artifacts
+/celebdf
+frames/
+data_list/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# env / secrets
+.env

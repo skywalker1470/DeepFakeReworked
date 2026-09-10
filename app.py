@@ -5,8 +5,7 @@ import torch.nn as nn
 import numpy as np
 from flask import Flask, render_template, request, send_from_directory
 from torchvision import transforms, models
-from facenet_pytorch import MTCNN
-from PIL import Image
+from face_detector import YOLOFaceDetector
 import subprocess
 # --------------------------------------------------
 # CONFIG
@@ -15,7 +14,7 @@ MODEL_PATH = "output/best_model.pth"   # <-- your trained model
 UPLOAD_FOLDER = "uploads"
 PROCESSED_FOLDER = "processed"
 FRAME_SKIP = 5
-THRESHOLD = 0.11
+THRESHOLD = 0.74
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -45,14 +44,16 @@ print("Model loaded on:", DEVICE)
 # --------------------------------------------------
 # FACE DETECTOR
 # --------------------------------------------------
-mtcnn = MTCNN(
+detector = YOLOFaceDetector(
     image_size=224,
     margin=20,
+    conf_threshold=0.5,
     device=DEVICE
 )
 
 transform = transforms.Compose([
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
 ])
 
 # --------------------------------------------------
@@ -89,12 +90,11 @@ def process_video(video_path, output_path):
                 continue
 
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(rgb)
 
-            face = mtcnn(img)
+            face = detector.detect(rgb)
 
             if face is not None:
-                face = face.unsqueeze(0).to(DEVICE)
+                face = transform(face).unsqueeze(0).to(DEVICE)
 
                 output = model(face)
                 prob = torch.sigmoid(output).item()
