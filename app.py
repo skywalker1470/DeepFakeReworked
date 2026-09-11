@@ -1,11 +1,14 @@
 import os
+import uuid
 import cv2
 import torch
 import torch.nn as nn
 import numpy as np
-from flask import Flask, render_template, request, send_from_directory
+from werkzeug.utils import secure_filename
+from flask import Flask, render_template, request, send_from_directory, abort
 from torchvision import transforms, models
 from face_detector import YOLOFaceDetector
+from ratelimit import is_rate_limited
 import subprocess
 # --------------------------------------------------
 # CONFIG
@@ -15,6 +18,7 @@ UPLOAD_FOLDER = "uploads"
 PROCESSED_FOLDER = "processed"
 FRAME_SKIP = 5
 THRESHOLD = 0.74
+MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200 MB
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -26,6 +30,7 @@ os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 # --------------------------------------------------
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 # --------------------------------------------------
 # LOAD EFFICIENTNET-B0 (MATCHES TRAINING)
@@ -160,6 +165,10 @@ def index():
 
     if request.method == "POST":
 
+        client_ip = request.headers.get("X-Forwarded-For", request.remote_addr) or "unknown"
+        if is_rate_limited(client_ip.split(",")[0].strip()):
+            return render_template("index.html", error="Rate limit exceeded — please wait a minute and try again"), 429
+
         if "video" not in request.files:
             return render_template("index.html", error="No file uploaded")
 
@@ -168,10 +177,13 @@ def index():
         if file.filename == "":
             return render_template("index.html", error="No selected file")
 
-        upload_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        safe_name = secure_filename(file.filename)
+        ext = os.path.splitext(safe_name)[1] or ".mp4"
+        unique_id = uuid.uuid4().hex
+        upload_path = os.path.join(UPLOAD_FOLDER, f"{unique_id}{ext}")
         file.save(upload_path)
 
-        output_name = "processed_" + file.filename
+        output_name = f"processed_{unique_id}.mp4"
         output_path = os.path.join(PROCESSED_FOLDER, output_name)
 
         result = process_video(upload_path, output_path)
@@ -192,4 +204,4 @@ def serve_processed(filename):
 
 # --------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False, host="0.0.0.0", port=5000)

@@ -2,10 +2,11 @@ import time
 import tempfile
 import os
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 
 from app.model import load_model, predict_face, THRESHOLD, DEVICE
 from app.preprocess import iter_face_crops
+from app.ratelimit import check_rate_limit
 from face_detector import YOLOFaceDetector
 
 app = FastAPI(title="Deepfake Detector API")
@@ -34,7 +35,7 @@ def get_metrics():
     }
 
 
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(check_rate_limit)])
 async def predict(file: UploadFile = File(...)):
     start = time.perf_counter()
 

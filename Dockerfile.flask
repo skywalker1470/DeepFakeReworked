@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /srv
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY app_flask_requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+COPY ratelimit.py .
+COPY face_detector.py .
+COPY templates ./templates
+COPY yolov8n-face-lindevs.pt .
+COPY output/best_model.pth ./output/best_model.pth
+
+EXPOSE 8000
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "app:app"]

@@ -1,6 +1,6 @@
 # Deepfake Detector — Cloud Deployment
 
-A cloud-deployed version of the existing Deepfake Detection System. The model is wrapped in a REST API, containerized with Docker, deployed to AWS, and the whole build-deploy-test cycle is automated with a Bash script.
+A cloud-deployed version of the existing Deepfake Detection System. The model is wrapped in a REST API, containerized with Docker, deployed to AWS EC2, and the whole build-deploy-test cycle is automated with a Bash script.
 
 This project takes an existing trained model and turns it into a real, callable cloud service — the goal is to demonstrate REST API design, containerization, cloud deployment, and automation end to end.
 
@@ -13,6 +13,12 @@ Most of my past work has focused on building and evaluating models. This project
 - Cloud deployment on AWS
 - Automation scripting with Bash
 
+## Instance sizing note
+
+The service runs on a `t3.micro` (AWS free tier — 1 vCPU, 1GB RAM). Measured locally, loading both models (EfficientNet-B0 classifier + YOLOv8n-face detector) on CPU takes ~700MB RSS before handling a single request — tight on a 1GB instance. A 2GB swapfile was added on the instance as a safety margin against OOM kills under load. This is acceptable for a low-traffic portfolio demo; a real-traffic deployment would need a bigger instance (`t3.small`/`medium`) rather than relying on swap.
+
+Oracle Cloud's Always Free Ampere A1 (ARM, up to 4 cores/24GB RAM, not time-limited) was considered as a way to sidestep this RAM constraint entirely, but its free-tier ARM capacity was unavailable at signup time in practice — a common issue with that tier. AWS EC2 free tier was used instead, accepting the swap-based mitigation above.
+
 ## Architecture
 
 ```
@@ -22,38 +28,40 @@ Client (curl / Postman / script)
    REST API (FastAPI)
         │
         ▼
-Deepfake Detector Model (EfficientNet-B0 + MTCNN pipeline)
+Deepfake Detector Model (EfficientNet-B0 + YOLOv8n-face pipeline)
         │
         ▼
    Docker container
         │
         ▼
-   AWS (EC2 or Lambda)
+   AWS EC2 (t3.micro, free tier + swap)
 ```
 
 ## Tech Stack
 
-- **Model**: EfficientNet-B0 (transfer learning), MTCNN for face detection, frame-level video inference
-- **API**: FastAPI (or Flask, reusing the existing web app as a base)
+- **Model**: EfficientNet-B0 (transfer learning), YOLOv8n-face for face detection, frame-level video inference
+- **API**: FastAPI
 - **Containerization**: Docker
-- **Cloud**: AWS EC2 (simple VM deployment) or AWS Lambda (serverless, if the model is lightweight enough)
+- **Cloud**: AWS EC2 (t3.micro, free tier)
 - **Automation**: Bash script for build, push, deploy, and smoke-test
 
 ## Project Structure
 
 ```
-deepfake-detector-cloud/
+DeepFakeReworked/
 ├── app/
-│   ├── main.py            # FastAPI app, defines endpoints
-│   ├── model.py            # Model loading and inference logic
-│   ├── preprocess.py       # Frame extraction, MTCNN face alignment
+│   ├── main.py             # FastAPI app, defines endpoints
+│   ├── model.py             # Model loading and inference logic
+│   ├── preprocess.py        # Frame extraction, YOLOv8-face crop generator
 │   └── requirements.txt
+├── face_detector.py         # Shared YOLOv8n-face detector wrapper
 ├── Dockerfile
-├── docker-compose.yml       # optional, for local testing
-├── deploy.sh                # automates build → push → deploy → test
+├── docker-compose.yml        # optional, for local testing
+├── deploy.sh                 # automates build → push → deploy → test
+├── .github/workflows/deploy.yml  # CI: auto-deploy on push to main
 ├── tests/
 │   └── test_api.py
-└── README.md
+└── readme.md
 ```
 
 ## API Endpoints
@@ -105,24 +113,17 @@ docker run -p 8000:8000 deepfake-detector
 
 ## AWS Deployment
 
-**Option A — EC2 (simplest)**
-1. Launch a small EC2 instance (e.g., t3.medium, or a GPU instance if inference speed matters).
-2. Install Docker on the instance.
-3. Pull the image and run the container, exposing port 8000.
-4. Open the security group to allow inbound traffic on that port.
-
-**Option B — Lambda (serverless)**
-1. Package the model and dependencies into a Lambda-compatible container image.
-2. Deploy via AWS Lambda with a container image, fronted by API Gateway.
-3. Better suited if traffic is low/bursty and cold-start latency is acceptable.
-
-Start with EC2 for simplicity, move to Lambda later if there's time.
+1. Launch a `t3.micro` EC2 instance (Ubuntu LTS AMI, free tier eligible).
+2. Open the security group: inbound TCP 22 (SSH, restricted to your IP) and TCP 8000 (API, `0.0.0.0/0`).
+3. Add a 2GB swapfile on the instance (see readme.md for the exact commands) — mitigates OOM risk given the 1GB RAM ceiling.
+4. Install Docker on the instance and add the login user to the `docker` group.
+5. Pull the image and run the container, exposing port 8000.
 
 ## Automation Script (`deploy.sh`)
 
 The script automates the full cycle:
 1. Build the Docker image
-2. Tag and push it to a container registry (Docker Hub or AWS ECR)
+2. Tag and push it to a container registry (Docker Hub)
 3. SSH into the EC2 instance and pull the latest image
 4. Restart the container
 5. Run a smoke test against `/health` to confirm the deployment succeeded
@@ -130,6 +131,8 @@ The script automates the full cycle:
 ```bash
 ./deploy.sh
 ```
+
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs this same flow automatically on every push to `main`, using repo secrets (`REGISTRY`, `DOCKERHUB_TOKEN`, `VM_HOST`, `VM_KEY`) for credentials.
 
 ## Testing
 
@@ -142,8 +145,14 @@ The script automates the full cycle:
 - Add authentication (API key) before exposing the endpoint publicly
 - Add request queuing for larger video files
 - Add CloudWatch logging and basic monitoring
-- Explore Lambda deployment for cost efficiency at low traffic
+- Move to a larger instance (t3.small/medium) if real traffic exceeds what swap can absorb
+- Add a manual approval gate to the deploy workflow instead of deploying on every push to main
 
 ## Status
 
-Planning stage. Model and Flask prototype already exist; this project wraps and deploys it.
+**Live.** Model retrained with YOLOv8n-face detection and corrected input normalization (94.8% video-level accuracy, 0.986 AUC on the Celeb-DF v2 test split). FastAPI service is built and deployed to an AWS EC2 `t3.micro` instance (2GB swap configured as a RAM safety margin, 20GB EBS volume), verified end-to-end over the public internet:
+
+- `GET /health` → 200 OK
+- `POST /predict` on a real video → 200 OK, correct prediction, ~9.4s inference time, ~330MB container memory usage (well within the 1GB instance)
+
+Remaining/optional work: wire up the GitHub Actions CI secrets for auto-deploy, add basic auth/rate limiting before sharing the link broadly (see Future Improvements).
