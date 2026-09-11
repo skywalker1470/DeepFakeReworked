@@ -7,7 +7,7 @@ Upload a video, get a real/fake verdict with confidence scores and annotated pla
 
 **🔴 Live demo: [http://51.21.152.188:8000](http://51.21.152.188:8000)**. Upload your own video and see it detect real vs. fake in real time.
 
-![Sample detection output](videos/output_003_000.gif)
+![Sample detection output](videos/demo.gif)
 
 ## Results
 
