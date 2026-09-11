@@ -1,6 +1,8 @@
 
 # DeepFake Detector
 
+**⚠️ SCOPE NOTE — READ BEFORE TESTING: this model is trained on Celeb-DF v2, whose fakes are generated with a modified autoencoder-based face-swap pipeline (an enhanced FakeApp/DFaker-style method — refined resolution, color matching, and temporal smoothing, NOT a GAN or diffusion model). Deepfake detectors are known to generalize poorly across generation methods, so a video made with a different technique (a GAN-based face-swap app, a diffusion model, etc.) may be misclassified as real. For a meaningful test of this demo, use a video generated with a similar autoencoder-based face-swap method, or one of the sample videos in [`videos/`](videos/). This is a well-documented limitation of the field, not specific to this implementation — see the [Celeb-DF paper](https://arxiv.org/abs/1909.12962) for details.**
+
 Upload a video, get a real/fake verdict with confidence scores and annotated playback — a face-level deepfake detector trained on **Celeb-DF v2**, fine-tuning **EfficientNet-B0** on **YOLOv8n**-cropped face frames, deployed live on AWS.
 
 **🔴 Live demo: [http://51.21.152.188:8000](http://51.21.152.188:8000)** — upload your own video and see it detect real vs. fake in real time.
@@ -23,6 +25,7 @@ Video-level evaluation on the held-out Celeb-DF v2 test split:
 - **Full ML lifecycle**: dataset prep → training → evaluation/threshold tuning → productionized inference, not just a notebook.
 - **Real deployment**: containerized with Docker, running live on AWS EC2, with actual constraints handled (a 1GB RAM instance needed swap space and careful memory budgeting to run two models reliably) rather than assumed away.
 - **REST API design**: a separate FastAPI service (see `app/`) with `/health`, `/predict`, `/metrics` endpoints, tested (`tests/test_api.py`), and CI-deployable via GitHub Actions.
+- **Awareness of real limitations**: this model generalizes well within its training distribution (Celeb-DF v2's autoencoder-based face-swap method) but, like all deepfake detectors, degrades on out-of-distribution generation methods — a known, documented constraint discussed above rather than glossed over. Extending training to multiple generation methods (e.g. FaceForensics++, DFDC) is a natural next step for improving cross-method generalization.
 
 ## How it works
 
